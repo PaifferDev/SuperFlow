@@ -8,7 +8,7 @@
     <Nullable>enable</Nullable>
     <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
     <PackageId>SuperFlow</PackageId>
-    <Version>1.0.1</Version>
+    <Version>1.0.2</Version>
     <Authors>Fernando Paiffer Aguiar</Authors>
     <PackageDescription>Librería para orquestar flujos de steps y acciones con .NET</PackageDescription>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
