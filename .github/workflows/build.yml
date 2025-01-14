@@ -4,7 +4,7 @@ on:
   push:
     branches: [ "master" ]
     tags:
-      - 'v*' 
+      - 'v*'
   pull_request:
     branches: [ "master" ]
   release:
@@ -23,7 +23,7 @@ jobs:
       - name: Setup .NET
         uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: 8.0.x
+          dotnet-version: '8.0.x'
 
       # 3. Restaurar dependencias
       - name: Restore dependencies
@@ -33,9 +33,9 @@ jobs:
       - name: Build
         run: dotnet build --configuration Release --no-restore
 
-      # 5. Ejecutar pruebas
+      # 5. Ejecutar pruebas en configuración Release
       - name: Test
-        run: dotnet test --no-build --verbosity normal
+        run: dotnet test --configuration Release --no-build --verbosity normal
 
   publish:
     needs: build
@@ -50,7 +50,7 @@ jobs:
       - name: Setup .NET
         uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: 8.0.x  # Asegúrate de que coincida con la versión usada en build
+          dotnet-version: '8.0.x'
 
       # 3. Restaurar dependencias
       - name: Restore dependencies
@@ -62,7 +62,7 @@ jobs:
 
       # 5. Empaquetar el proyecto en un archivo .nupkg
       - name: Pack
-        run: dotnet pack ./SuperFlow/SuperFlow.csproj --configuration Release --no-build --output ./nupkg
+        run: dotnet pack --configuration Release --no-build --output ./nupkg
 
       # 6. Publicar el paquete en NuGet
       - name: Publish to NuGet
