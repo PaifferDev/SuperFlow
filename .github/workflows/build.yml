@@ -19,11 +19,11 @@ jobs:
     steps:
       # 1. Checkout del código
       - name: Checkout repository
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       # 2. Configurar .NET
       - name: Setup .NET
-        uses: actions/setup-dotnet@v3
+        uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '8.0.x'
 
@@ -37,7 +37,7 @@ jobs:
 
       # 5. Ejecutar pruebas
       - name: Test
-        run: dotnet test --no-build --verbosity normal
+        run: dotnet test ./SuperFlow.Tests/SuperFlow.Tests.csproj --no-build --verbosity normal
 
   publish:
     needs: build
@@ -47,11 +47,11 @@ jobs:
     steps:
       # 1. Checkout del código
       - name: Checkout repository
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       # 2. Configurar .NET
       - name: Setup .NET
-        uses: actions/setup-dotnet@v3
+        uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '8.0.x'
 
@@ -65,7 +65,7 @@ jobs:
 
       # 5. Empaquetar el proyecto en un archivo .nupkg
       - name: Pack
-        run: dotnet pack --configuration Release --no-build --output ./nupkg
+        run: dotnet pack ./SuperFlow/SuperFlow.csproj --configuration Release --no-build --output ./nupkg
 
       # 6. Publicar el paquete en NuGet
       - name: Publish to NuGet
