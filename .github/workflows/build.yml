@@ -1,31 +1,29 @@
-name: Build and Publish
+name: .NET Build and Publish
 
 on:
   push:
-    branches:
-      - master
+    branches: [ "master" ]
     tags:
-      - 'v*'
+      - 'v*' 
   pull_request:
-    branches:
-      - master
+    branches: [ "master" ]
   release:
     types: [published]
 
 jobs:
   build:
+
     runs-on: ubuntu-latest
 
     steps:
       # 1. Checkout del código
-      - name: Checkout repository
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
       # 2. Configurar .NET
       - name: Setup .NET
         uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: '8.0.x'
+          dotnet-version: 8.0.x
 
       # 3. Restaurar dependencias
       - name: Restore dependencies
@@ -37,7 +35,7 @@ jobs:
 
       # 5. Ejecutar pruebas
       - name: Test
-        run: dotnet test ./SuperFlow.Tests/SuperFlow.Tests.csproj --no-build --verbosity normal
+        run: dotnet test --no-build --verbosity normal
 
   publish:
     needs: build
@@ -46,14 +44,13 @@ jobs:
 
     steps:
       # 1. Checkout del código
-      - name: Checkout repository
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
       # 2. Configurar .NET
       - name: Setup .NET
         uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: '8.0.x'
+          dotnet-version: 8.0.x  # Asegúrate de que coincida con la versión usada en build
 
       # 3. Restaurar dependencias
       - name: Restore dependencies
