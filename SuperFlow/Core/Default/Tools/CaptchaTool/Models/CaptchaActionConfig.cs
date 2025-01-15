@@ -1,12 +1,12 @@
-﻿namespace SuperFlow.Core.Default.Actions.CaptchaAction.Models
+﻿namespace SuperFlow.Core.Default.Tools.CaptchaTool.Models
 {
 	/// <summary>
-	/// Configuración básica para la CaptchaAction.
+	/// Configuración básica para la CaptchaTool.
 	/// - Proveedores disponibles
 	/// - Timeout
 	/// - Número de reintentos, etc.
 	/// </summary>
-	public class CaptchaActionConfig
+	public class CaptchaToolConfig
 	{
 		/// <summary>
 		/// Tiempo máximo (en segundos) para intentar resolver un captcha con un provider.
@@ -23,7 +23,7 @@
 		/// </summary>
 		public List<ICaptchaProvider> Providers { get; set; } = new List<ICaptchaProvider>();
 	}
-	public class CaptchaActionParameters
+	public class CaptchaToolParameters
 	{
 		public byte[] ImageData { get; set; } = Array.Empty<byte>();
 	}

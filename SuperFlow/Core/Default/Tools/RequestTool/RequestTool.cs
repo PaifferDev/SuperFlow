@@ -1,14 +1,14 @@
-﻿using SuperFlow.Core.Actions;
-using SuperFlow.Core.Default.Actions.RequestAction.Models;
+﻿using SuperFlow.Core.Tools;
+using SuperFlow.Core.Default.Tools.RequestTool.Models;
 using SuperFlow.Core.Models;
 using System.Text;
 
-public class RequestAction : BaseAction
+public class RequestTool : BaseTool
 {
-	private readonly RequestActionConfig _config;
+	private readonly RequestToolConfig _config;
 	private readonly IHttpClientFactory _httpClientFactory;
 
-	public RequestAction(string name, RequestActionConfig config, IHttpClientFactory httpClientFactory)
+	public RequestTool(string name, RequestToolConfig config, IHttpClientFactory httpClientFactory)
 		: base(name)
 	{
 		_config = config;
@@ -19,10 +19,10 @@ public class RequestAction : BaseAction
 	public override async Task<object?> ExecuteAsync(FlowContext context, object? parameters = null)
 	{
 
-		var args = parameters as RequestActionParameters;
+		var args = parameters as RequestToolParameters;
 		if (args == null)
 		{
-			throw new ArgumentException("Se requieren parámetros de tipo RequestActionParameters");
+			throw new ArgumentException("Se requieren parámetros de tipo RequestToolParameters");
 		}
 		string method = args.Method ?? "GET";
 		string endpoint = args.Endpoint ?? "";

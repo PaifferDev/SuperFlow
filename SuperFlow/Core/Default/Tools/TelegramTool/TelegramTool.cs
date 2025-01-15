@@ -1,24 +1,24 @@
-﻿using SuperFlow.Core.Actions;
-using SuperFlow.Core.Default.Actions.TelegramAction.Models;
+﻿using SuperFlow.Core.Tools;
+using SuperFlow.Core.Default.Tools.TelegramTool.Models;
 using SuperFlow.Core.Models;
 using Telegram.Bot;
 
-namespace SuperFlow.Core.Default.Actions.TelegramAction
+namespace SuperFlow.Core.Default.Tools.TelegramTool
 {
-	public class TelegramAction : BaseAction
+	public class TelegramTool : BaseTool
 	{
 		private readonly TelegramConfig _config;
 
-		public TelegramAction(string name, TelegramConfig config) : base(name)
+		public TelegramTool(string name, TelegramConfig config) : base(name)
 		{
 			_config = config ?? throw new ArgumentNullException(nameof(config));
 		}
 
 		public override async Task<object?> ExecuteAsync(FlowContext context, dynamic? parameters = null)
 		{
-			var args = parameters as TelegramActionParameters;
+			var args = parameters as TelegramToolParameters;
 			if (args == null)
-				throw new ArgumentException("Se requieren parámetros de tipo TelegramActionParameters");
+				throw new ArgumentException("Se requieren parámetros de tipo TelegramToolParameters");
 
 			string message = args.Message;
 			string chatId = args.ChatId ?? _config.DefaultChatId;

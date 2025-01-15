@@ -1,14 +1,14 @@
-﻿using SuperFlow.Core.Default.Actions.TelegramAction;
-using SuperFlow.Core.Default.Actions.TelegramAction.Models;
+﻿using SuperFlow.Core.Default.Tools.TelegramTool;
+using SuperFlow.Core.Default.Tools.TelegramTool.Models;
 using SuperFlow.Core.Models;
 using Telegram.Bot;
 using Telegram.Bot.Args;
 using Telegram.Bot.Exceptions;
 using Telegram.Bot.Requests.Abstractions;
 using Telegram.Bot.Types;
-namespace SuperFlow.Tests.ActionsTest
+namespace SuperFlow.Tests.ToolsTest
 {
-	public class TelegramActionTests
+	public class TelegramToolTests
 	{
 		[Fact]
 		public async Task ExecuteAsync_Should_SendMessageCorrectly()
@@ -20,17 +20,17 @@ namespace SuperFlow.Tests.ActionsTest
 				DefaultChatId = "12345"
 			};
 
-			var action = new FakeTelegramAction("SendTelegramAction", config);
+			var tool = new FakeTelegramTool("SendTelegramTool", config);
 
 			var flowContext = new FlowContext();
-			var parameters = new TelegramActionParameters
+			var parameters = new TelegramToolParameters
 			{
 				Message = "Hola Mundo",
 				ChatId = "999999"
 			};
 
 			// Act
-			var result = await action.ExecuteAsync(flowContext, parameters);
+			var result = await tool.ExecuteAsync(flowContext, parameters);
 
 			// Assert
 			Assert.NotNull(result);
@@ -48,11 +48,11 @@ namespace SuperFlow.Tests.ActionsTest
 	}
 
 	// ------------------------------------------------------------------------
-	// FakeTelegramAction: sobrescribe CreateBotClient y SendMessageAsync
+	// FakeTelegramTool: sobrescribe CreateBotClient y SendMessageAsync
 	// ------------------------------------------------------------------------
-	internal class FakeTelegramAction : TelegramAction
+	internal class FakeTelegramTool : TelegramTool
 	{
-		public FakeTelegramAction(string name, TelegramConfig config)
+		public FakeTelegramTool(string name, TelegramConfig config)
 			: base(name, config)
 		{
 		}

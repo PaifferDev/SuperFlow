@@ -1,10 +1,10 @@
-﻿using SuperFlow.Core.Default.Actions.CaptchaAction.Models;
+﻿using SuperFlow.Core.Default.Tools.CaptchaTool.Models;
 using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
-namespace SuperFlow.Core.Default.Actions.CaptchaAction.Providers
+namespace SuperFlow.Core.Default.Tools.CaptchaTool.Providers
 {
 	public class TwoCaptchaProvider : ICaptchaProvider
 	{
@@ -79,7 +79,7 @@ namespace SuperFlow.Core.Default.Actions.CaptchaAction.Providers
 				cancelToken.ThrowIfCancellationRequested();
 				await Task.Delay(_pollingDelayMs, cancelToken);
 
-				var checkUrl = $"https://2captcha.com/res.php?key={selectedKey}&action=get&id={captchaId}&json=1";
+				var checkUrl = $"https://2captcha.com/res.php?key={selectedKey}&tool=get&id={captchaId}&json=1";
 				var checkResponse = await _httpClient.GetStringAsync(checkUrl, cancelToken);
 
 				var checkResult = JsonSerializer.Deserialize<TwoCaptchaResResponse>(checkResponse, options);
@@ -119,7 +119,7 @@ namespace SuperFlow.Core.Default.Actions.CaptchaAction.Providers
 				return;
 			}
 
-			var url = $"https://2captcha.com/res.php?key={usedKey}&action=reportbad&id={captchaId}&json=1";
+			var url = $"https://2captcha.com/res.php?key={usedKey}&tool=reportbad&id={captchaId}&json=1";
 			var resp = await _httpClient.GetStringAsync(url);
 			Console.WriteLine($"[2Captcha] ReportFailure => {resp}");
 		}

@@ -1,10 +1,10 @@
-﻿using SuperFlow.Core.Default.Actions.CaptchaAction.Models;
+﻿using SuperFlow.Core.Default.Tools.CaptchaTool.Models;
 using System.Collections.Concurrent;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
-namespace SuperFlow.Core.Default.Actions.CaptchaAction.Providers
+namespace SuperFlow.Core.Default.Tools.CaptchaTool.Providers
 {
 	public class CapMonsterProvider : ICaptchaProvider
 	{

@@ -1,14 +1,14 @@
-﻿namespace SuperFlow.Core.Default.Actions.RequestAction.Models
+﻿namespace SuperFlow.Core.Default.Tools.RequestTool.Models
 {
 	/// <summary>
-	/// Configuración para RequestAction (por ejemplo, un endpoint por defecto, headers, etc.).
+	/// Configuración para RequestTool (por ejemplo, un endpoint por defecto, headers, etc.).
 	/// </summary>
-	public class RequestActionConfig
+	public class RequestToolConfig
 	{
 		public string BaseUrl { get; set; }
 		public Dictionary<string, string> DefaultHeaders { get; set; } = new Dictionary<string, string>();
 	}
-	public class RequestActionParameters
+	public class RequestToolParameters
 	{
 		public string Method { get; set; } = "GET";
 		public string Endpoint { get; set; } = "";

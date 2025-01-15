@@ -1,12 +1,12 @@
 ﻿using Moq;
-using SuperFlow.Core.Default.Actions.RequestAction;
-using SuperFlow.Core.Default.Actions.RequestAction.Models;
+using SuperFlow.Core.Default.Tools.RequestTool;
+using SuperFlow.Core.Default.Tools.RequestTool.Models;
 using SuperFlow.Core.Models;
 using System.Net;
 
-namespace SuperFlow.Tests.ActionsTest
+namespace SuperFlow.Tests.ToolsTest
 {
-	public class RequestActionTests
+	public class RequestToolTests
 	{
 		[Fact]
 		public async Task ExecuteAsync_Should_ReturnResponseBody_When_GET()
@@ -27,22 +27,22 @@ namespace SuperFlow.Tests.ActionsTest
 			mockFactory.Setup(f => f.CreateClient("GenericClient"))
 					   .Returns(client);
 
-			var config = new RequestActionConfig
+			var config = new RequestToolConfig
 			{
 				BaseUrl = "https://example.com"
 			};
 
-			var action = new RequestAction("HttpRequestAction", config, mockFactory.Object);
+			var tool = new RequestTool("HttpRequestTool", config, mockFactory.Object);
 
 			var flowContext = new FlowContext();
-			var parameters = new RequestActionParameters
+			var parameters = new RequestToolParameters
 			{
 				Method = "GET",
 				Endpoint = "test"
 			};
 
 			// Act
-			var result = await action.ExecuteAsync(flowContext, parameters);
+			var result = await tool.ExecuteAsync(flowContext, parameters);
 
 			// Assert
 			Assert.NotNull(result);

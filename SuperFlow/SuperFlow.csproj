@@ -10,10 +10,10 @@
     <PackageId>SuperFlow</PackageId>
     <Version>1.0.2</Version>
     <Authors>Fernando Paiffer Aguiar</Authors>
-    <PackageDescription>Librería para orquestar flujos de steps y acciones con .NET</PackageDescription>
+    <PackageDescription>Library to orchestrate flows of steps and tools with .NET</PackageDescription>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <RepositoryUrl>https://github.com/PaifferDev/SuperFlow</RepositoryUrl>
-    <PackageTags>Flow Steps Actions Workflow Bots</PackageTags>
+    <PackageTags>Flow Steps Tools Workflow Bots</PackageTags>
     
   </PropertyGroup>
 

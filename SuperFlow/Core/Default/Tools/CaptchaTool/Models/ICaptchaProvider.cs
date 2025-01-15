@@ -1,4 +1,4 @@
-﻿namespace SuperFlow.Core.Default.Actions.CaptchaAction.Models
+﻿namespace SuperFlow.Core.Default.Tools.CaptchaTool.Models
 {
 	public interface ICaptchaProvider
 	{

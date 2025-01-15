@@ -1,8 +1,8 @@
 ﻿using SuperFlow.Core.Models;
 
-namespace SuperFlow.Core.Actions
+namespace SuperFlow.Core.Tools
 {
-    public interface IFlowAction
+    public interface IFlowTool
     {
         string Name { get; }
 

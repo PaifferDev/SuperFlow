@@ -1,33 +1,33 @@
-﻿using SuperFlow.Core.Actions;
-using SuperFlow.Core.Default.Actions.CaptchaAction.Models;
+﻿using SuperFlow.Core.Tools;
+using SuperFlow.Core.Default.Tools.CaptchaTool.Models;
 using SuperFlow.Core.Models;
 using System.Collections.Concurrent;
 using System.Diagnostics;
 
-namespace SuperFlow.Core.Default.Actions.CaptchaAction
+namespace SuperFlow.Core.Default.Tools.CaptchaTool
 {
 	/// <summary>
-	/// Action que encapsula toda la lógica para resolver un captcha
+	/// Tool que encapsula toda la lógica para resolver un captcha
 	/// usando uno o varios ICaptchaProvider.
 	/// </summary>
-	public class CaptchaAction : BaseAction
+	public class CaptchaTool : BaseTool
 	{
-		private readonly CaptchaActionConfig _config;
+		private readonly CaptchaToolConfig _config;
 
 		// Mapa [nombreProvider => cantidad de fallos]
 		private readonly ConcurrentDictionary<string, int> _providerFailureCounts = new ConcurrentDictionary<string, int>();
 
-		public CaptchaAction(string name, CaptchaActionConfig config) : base(name)
+		public CaptchaTool(string name, CaptchaToolConfig config) : base(name)
 		{
 			_config = config ?? throw new ArgumentNullException(nameof(config));
 
 			if (_config.Providers.Count == 0)
-				throw new InvalidOperationException("No hay proveedores de captcha registrados en CaptchaActionConfig.");
+				throw new InvalidOperationException("No hay proveedores de captcha registrados en CaptchaToolConfig.");
 		}
 
 		public override async Task<object?> ExecuteAsync(FlowContext context, object? parameters = null)
 		{
-			var args = parameters as CaptchaActionParameters;
+			var args = parameters as CaptchaToolParameters;
 			if (args == null || args.ImageData.Length == 0)
 			{
 				throw new ArgumentException("Se requiere 'ImageData' válido para resolver captcha.");
@@ -71,7 +71,7 @@ namespace SuperFlow.Core.Default.Actions.CaptchaAction
 				catch (Exception ex)
 				{
 					// Se vale loguear, re-lanzar, etc.
-					Console.WriteLine($"[CaptchaAction] Falló intento #{attempt}: {ex.Message}");
+					Console.WriteLine($"[CaptchaTool] Falló intento #{attempt}: {ex.Message}");
 				}
 			}
 
@@ -150,7 +150,7 @@ namespace SuperFlow.Core.Default.Actions.CaptchaAction
 			catch (OperationCanceledException)
 			{
 				stopwatch.Stop();
-				throw new TimeoutException($"[CaptchaAction] Se agotaron {solveTimeoutSeconds}s con el provider {provider.Name}");
+				throw new TimeoutException($"[CaptchaTool] Se agotaron {solveTimeoutSeconds}s con el provider {provider.Name}");
 			}
 			catch
 			{
@@ -166,7 +166,7 @@ namespace SuperFlow.Core.Default.Actions.CaptchaAction
 		private void IncrementFailureFromMessage(string message)
 		{
 			var prefix = "provider ";
-			// Ejemplo: "[CaptchaAction] Se agotaron 70s con el provider TwoCaptcha"
+			// Ejemplo: "[CaptchaTool] Se agotaron 70s con el provider TwoCaptcha"
 			// Ajusta tu parsing según tus logs
 			int index = message.IndexOf(prefix, StringComparison.OrdinalIgnoreCase);
 			if (index >= 0)

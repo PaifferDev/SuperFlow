@@ -1,10 +1,10 @@
-﻿using SuperFlow.Core.Default.Actions.CaptchaAction;
-using SuperFlow.Core.Default.Actions.CaptchaAction.Models;
+﻿using SuperFlow.Core.Default.Tools.CaptchaTool;
+using SuperFlow.Core.Default.Tools.CaptchaTool.Models;
 using SuperFlow.Core.Models;
 
-namespace SuperFlow.Tests.ActionsTest
+namespace SuperFlow.Tests.ToolsTest
 {
-	public class CaptchaActionTests
+	public class CaptchaToolTests
 	{
 		[Fact]
 		public async Task ExecuteAsync_Should_ReturnFirstSuccessfulProvider()
@@ -22,23 +22,23 @@ namespace SuperFlow.Tests.ActionsTest
 				DelayMs = 1000
 			};
 
-			var config = new CaptchaActionConfig
+			var config = new CaptchaToolConfig
 			{
 				SolveTimeoutSeconds = 5,
 				MaxRetries = 1, // un intento
 				Providers = new List<ICaptchaProvider> { slowProvider, fastProvider }
 			};
 
-			var action = new CaptchaAction("SolveCaptchaAction", config);
+			var tool = new CaptchaTool("SolveCaptchaTool", config);
 			var context = new FlowContext();
 
-			var parameters = new CaptchaActionParameters
+			var parameters = new CaptchaToolParameters
 			{
 				ImageData = new byte[] { 1, 2, 3 } // simular un captcha
 			};
 
 			// Act
-			var result = await action.ExecuteAsync(context, parameters);
+			var result = await tool.ExecuteAsync(context, parameters);
 
 			// Assert
 			Assert.NotNull(result);
@@ -64,21 +64,21 @@ namespace SuperFlow.Tests.ActionsTest
 				WillSucceed = false
 			};
 
-			var config = new CaptchaActionConfig
+			var config = new CaptchaToolConfig
 			{
 				SolveTimeoutSeconds = 2,
 				MaxRetries = 1,
 				Providers = new List<ICaptchaProvider> { failingProvider1, failingProvider2 }
 			};
 
-			var action = new CaptchaAction("SolveCaptchaAction", config);
+			var tool = new CaptchaTool("SolveCaptchaTool", config);
 			var context = new FlowContext();
 
-			var parameters = new CaptchaActionParameters { ImageData = new byte[] { 9, 9, 9 } };
+			var parameters = new CaptchaToolParameters { ImageData = new byte[] { 9, 9, 9 } };
 
 			// Act & Assert
 			await Assert.ThrowsAsync<InvalidOperationException>(
-				() => action.ExecuteAsync(context, parameters));
+				() => tool.ExecuteAsync(context, parameters));
 		}
 
 		[Fact]
@@ -92,23 +92,23 @@ namespace SuperFlow.Tests.ActionsTest
 				DelayMs = 100
 			};
 
-			var config = new CaptchaActionConfig
+			var config = new CaptchaToolConfig
 			{
 				SolveTimeoutSeconds = 1,
 				MaxRetries = 2,
 				Providers = new List<ICaptchaProvider> { togglingProvider }
 			};
 
-			var action = new CaptchaAction("SolveCaptchaAction", config);
+			var tool = new CaptchaTool("SolveCaptchaTool", config);
 			var context = new FlowContext();
-			var parameters = new CaptchaActionParameters { ImageData = new byte[] { 7, 7, 7 } };
+			var parameters = new CaptchaToolParameters { ImageData = new byte[] { 7, 7, 7 } };
 
 			// 1er reintento => falla
 			// 2do reintento => lo hacemos que "ahora sí funcione"
 			// => Ver FakeCaptchaProvider: en cada intento cambia "WillSucceed"
 
 			// Act
-			var result = await action.ExecuteAsync(context, parameters);
+			var result = await tool.ExecuteAsync(context, parameters);
 
 			// Assert
 			// Debe acabar con éxito en el 2o reintento
