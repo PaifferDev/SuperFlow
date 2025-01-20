@@ -10,9 +10,9 @@ namespace SuperFlow.Tests.ToolsTest
 		public async Task TwoProvidersFastCoincidence_ShouldReturnImmediately()
 		{
 			// Arrange
-			var p1 = new FakeProvider("P1", "ABC", 100);   // respond in 100ms, solution=ABC
-			var p2 = new FakeProvider("P2", "ABC", 120);   // 120ms, solution=ABC => coincide con p1
-			var p3 = new FakeProvider("P3", "XYZ", 200);   // 200ms
+			var p1 = new FakeProvider("P1", "ABC", 100);   // responde en 100ms, solución=ABC
+			var p2 = new FakeProvider("P2", "ABC", 120);   // 120ms, solución=ABC => coincide con p1
+			var p3 = new FakeProvider("P3", "XYZ", 200);   // 200ms, solución diferente
 			var config = new CaptchaToolConfig
 			{
 				SolveTimeoutSeconds = 5,
@@ -29,7 +29,6 @@ namespace SuperFlow.Tests.ToolsTest
 			Assert.NotNull(result);
 			var captchaText = (string)result.GetType().GetProperty("CaptchaText").GetValue(result);
 			Assert.Equal("ABC", captchaText);
-			// Debe retornar en cuanto P2 llega, sin esperar P3
 		}
 
 		[Fact]
@@ -52,104 +51,91 @@ namespace SuperFlow.Tests.ToolsTest
 			var result = await tool.ExecuteAsync(context, new CaptchaToolParameters { ImageData = new byte[] { 2 } });
 
 			// Assert
-			// No coincidencia => fallback => pick el "menos fails" => todos =0
-			// => tie => pick "más rápido" => p1 => "AAA"
 			var captchaText = (string)result.GetType().GetProperty("CaptchaText").GetValue(result);
-			Assert.Equal("AAA", captchaText);
+			Assert.Equal("AAA", captchaText); // El más rápido se selecciona.
 		}
 
 		[Fact]
-		public async Task AllFail_ThrowsException()
+		public async Task ExcludeProviderAfterTwoFails()
 		{
 			// Arrange
-			var f1 = new FailingProvider("F1");
-			var f2 = new FailingProvider("F2");
-			var config = new CaptchaToolConfig
-			{
-				SolveTimeoutSeconds = 1,
-				MaxRetries = 1,
-				Providers = new List<ICaptchaProvider> { f1, f2 }
-			};
-			var tool = new CaptchaTool("TestTool", config);
-
-			// Act & Assert
-			await Assert.ThrowsAsync<InvalidOperationException>(async () =>
-			{
-				await tool.ExecuteAsync(new FlowContext(), new CaptchaToolParameters { ImageData = new byte[] { 3 } });
-			});
-		}
-
-		[Fact]
-		public async Task ExcludeProviderAfter2Fails()
-		{
-			// Arrange
-			var p1 = new TogglingProvider("P1") { NextFailsCount = 2 }; // fallará 2 veces, luego success
+			var p1 = new TogglingProvider("P1") { NextFailsCount = 2 }; // fallará 2 veces antes de responder
 			var p2 = new FakeProvider("P2", "GOOD", 150);
 
 			var config = new CaptchaToolConfig
 			{
 				SolveTimeoutSeconds = 1,
+				MaxRetries = 3,
+				Providers = new List<ICaptchaProvider> { p1, p2 }
+			};
+			var tool = new CaptchaTool("TestTool", config);
+
+			// Act 1: P1 falla, P2 responde correctamente.
+			var context = new FlowContext();
+			var result1 = await tool.ExecuteAsync(context, new CaptchaToolParameters { ImageData = new byte[] { 1 } });
+			var captchaText1 = (string)result1.GetType().GetProperty("CaptchaText").GetValue(result1);
+			Assert.Equal("GOOD", captchaText1);
+
+			// Act 2: P1 falla otra vez, P2 sigue respondiendo.
+			var result2 = await tool.ExecuteAsync(context, new CaptchaToolParameters { ImageData = new byte[] { 1 } });
+			var captchaText2 = (string)result2.GetType().GetProperty("CaptchaText").GetValue(result2);
+			Assert.Equal("GOOD", captchaText2);
+
+			// Act 3: P1 es excluido, solo P2 responde.
+			var result3 = await tool.ExecuteAsync(context, new CaptchaToolParameters { ImageData = new byte[] { 1 } });
+			var captchaText3 = (string)result3.GetType().GetProperty("CaptchaText").GetValue(result3);
+			Assert.Equal("GOOD", captchaText3);
+		}
+
+		[Fact]
+		public async Task ResetProvidersWhenAllExcluded()
+		{
+			// Arrange
+			var p1 = new FailingProvider("P1");
+			var p2 = new FailingProvider("P2");
+			var config = new CaptchaToolConfig
+			{
+				SolveTimeoutSeconds = 1,
+				MaxRetries = 3,
+				Providers = new List<ICaptchaProvider> { p1, p2 }
+			};
+			var tool = new CaptchaTool("TestTool", config);
+
+			// Act & Assert
+			await Assert.ThrowsAsync<InvalidOperationException>(() =>
+				tool.ExecuteAsync(new FlowContext(), new CaptchaToolParameters { ImageData = new byte[] { 3 } }));
+
+			// Después de varios intentos, los contadores deben reiniciarse.
+		}
+
+		[Fact]
+		public async Task ReportFailureIncreasesFailCount()
+		{
+			// Arrange
+			var p1 = new FakeProvider("P1", "WRONG", 100);
+			var p2 = new FakeProvider("P2", "CORRECT", 200);
+			var config = new CaptchaToolConfig
+			{
+				SolveTimeoutSeconds = 5,
 				MaxRetries = 1,
 				Providers = new List<ICaptchaProvider> { p1, p2 }
 			};
 			var tool = new CaptchaTool("TestTool", config);
 
-			// Round1 => p1( error ), p2( success?), 
-			// Actually p1 => error, p2 => success => fallback ??? 
-			// or if p2 is success => no need fallback => but no coincidence => fallback => picks p2. 
-			// => p1 accum=1 fail
-			// Round2 => p1 => error => accum=2 fails => p2 => success => fallback => picks p2
-			// Round3 => => p1 is excluded => only p2 => final?
-
-			// Act #1
+			// Act 1: Resolver con respuesta incorrecta.
 			var context = new FlowContext();
-			var r1 = await tool.ExecuteAsync(context, new CaptchaToolParameters { ImageData = new byte[] { 9 } });
-			// p1 => fail => fails=1, p2 => success => no coincidence => fallback => p2
-			var text1 = (string)r1.GetType().GetProperty("CaptchaText").GetValue(r1);
-			Assert.Equal("GOOD", text1);
+			var result = await tool.ExecuteAsync(context, new CaptchaToolParameters { ImageData = new byte[] { 1 } });
 
-			// Act #2
-			var r2 = await tool.ExecuteAsync(context, new CaptchaToolParameters { ImageData = new byte[] { 9 } });
-			// p1 => fail => fails=2 => p2 => success => fallback => p2
-			var text2 = (string)r2.GetType().GetProperty("CaptchaText").GetValue(r2);
-			Assert.Equal("GOOD", text2);
+			var providerName = (string)result.GetType().GetProperty("ProviderName").GetValue(result);
+			Assert.Equal("P1", providerName);
 
-			// Act #3 => p1 exclude => only p2 => immediate success
-			var r3 = await tool.ExecuteAsync(context, new CaptchaToolParameters { ImageData = new byte[] { 9 } });
-			var text3 = (string)r3.GetType().GetProperty("CaptchaText").GetValue(r3);
-			Assert.Equal("GOOD", text3);
-		}
+			// Reportar fallo para P1.
+			await tool.ReportFailureAsync("P1", "FAKE_ID_P1");
 
-		[Fact]
-		public async Task ResetIfAllExcluded()
-		{
-			// Arrange
-			var allFailing = new List<ICaptchaProvider>
-			{
-				new FailingProvider("F1"),
-				new FailingProvider("F2"),
-				new FailingProvider("F3")
-			};
-			var config = new CaptchaToolConfig
-			{
-				SolveTimeoutSeconds = 1,
-				MaxRetries = 2,
-				Providers = allFailing
-			};
-			var tool = new CaptchaTool("TestTool", config);
-
-			// Round1 => todos fallan => fails=1 cada uno => throw => reintento (#2)
-			// Round2 => todos fallan => fails=2 => throw => reintento (#3) => 
-			// Round3 => se detecta "all excluded" => se resetean => but siguen fallando => infinite?
-			// -> para test, con maxretries=2 => lanza exception final
-
-			// Actually, 
-			// 1er ExecuteAsync => 
-			//   Round1 => all fail => exception => attempt=1 
-			//   Round2 => all fail => exception => attempt=2 
-			// => final => lanza error => fails=2 => pero 3rd round no se produce xq maxretries=2
-			await Assert.ThrowsAsync<InvalidOperationException>(() =>
-				tool.ExecuteAsync(new FlowContext(), new CaptchaToolParameters { ImageData = new byte[] { 7 } }));
+			// Act 2: Intentar nuevamente, P1 debe estar excluido.
+			var result2 = await tool.ExecuteAsync(context, new CaptchaToolParameters { ImageData = new byte[] { 1 } });
+			var providerName2 = (string)result2.GetType().GetProperty("ProviderName").GetValue(result2);
+			Assert.Equal("P2", providerName2);
 		}
 
 		// ------------------------------------------------------------------------
