@@ -1,4 +1,5 @@
-﻿using SuperFlow.Core.Default.Tools.CaptchaTool.Models;
+﻿using Serilog;
+using SuperFlow.Core.Default.Tools.CaptchaTool.Models;
 using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Text.Json;
@@ -136,7 +137,7 @@ namespace SuperFlow.Core.Default.Tools.CaptchaTool.Providers
 			if (string.IsNullOrEmpty(captchaId)) return;
 			if (!_captchaKeyMapping.TryGetValue(captchaId, out var usedToken))
 			{
-				Console.WriteLine($"[BestCaptchaSolver] No se encontró token para captchaId={captchaId}");
+				Log.Information($"[BestCaptchaSolver] No se encontró token para captchaId={captchaId}");
 				return;
 			}
 
@@ -150,7 +151,7 @@ namespace SuperFlow.Core.Default.Tools.CaptchaTool.Providers
 			var url = $"https://bcsapi.xyz/api/captcha/bad/{captchaId}";
 			var resp = await _httpClient.PostAsync(url, badContent);
 			var respStr = await resp.Content.ReadAsStringAsync();
-			Console.WriteLine($"[BestCaptchaSolver] ReportFailure => {respStr}");
+			Log.Information($"[BestCaptchaSolver] ReportFailure => {respStr}");
 		}
 
 		// Clases auxiliares

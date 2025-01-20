@@ -137,7 +137,7 @@ namespace SuperFlow.Core.Default.Tools.CaptchaTool.Providers
 
 			if (!_taskKeyMapping.TryGetValue(taskId, out var usedKey))
 			{
-				Console.WriteLine($"[AntiCaptcha] Could not find clientKey for taskId={taskId} in _taskKeyMapping.");
+				Log.Information($"[AntiCaptcha] Could not find clientKey for taskId={taskId} in _taskKeyMapping.");
 				return;
 			}
 
@@ -151,7 +151,7 @@ namespace SuperFlow.Core.Default.Tools.CaptchaTool.Providers
 
 			var resp = await _httpClient.PostAsync("https://api.anti-captcha.com/reportIncorrectImageCaptcha", content);
 			var respStr = await resp.Content.ReadAsStringAsync();
-			Console.WriteLine($"[AntiCaptcha] ReportFailure => {respStr}");
+			Log.Information($"[AntiCaptcha] ReportFailure => {respStr}");
 		}
 
 		// Clases que mapean EXACTAMENTE lo que AntiCaptcha envía

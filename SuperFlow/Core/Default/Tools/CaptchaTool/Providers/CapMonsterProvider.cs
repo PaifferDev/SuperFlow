@@ -1,4 +1,5 @@
-﻿using SuperFlow.Core.Default.Tools.CaptchaTool.Models;
+﻿using Serilog;
+using SuperFlow.Core.Default.Tools.CaptchaTool.Models;
 using System.Collections.Concurrent;
 using System.Text;
 using System.Text.Json;
@@ -126,7 +127,7 @@ namespace SuperFlow.Core.Default.Tools.CaptchaTool.Providers
 
 			if (!_taskKeyMapping.TryGetValue(taskId, out var usedKey))
 			{
-				Console.WriteLine($"[CapMonster] No se encontró la key para el taskId={taskId} en _taskKeyMapping.");
+				Log.Information($"[CapMonster] No se encontró la key para el taskId={taskId} en _taskKeyMapping.");
 				return;
 			}
 
@@ -147,7 +148,7 @@ namespace SuperFlow.Core.Default.Tools.CaptchaTool.Providers
 
 			var resp = await _httpClient.PostAsync(reportUrl, content);
 			var respStr = await resp.Content.ReadAsStringAsync();
-			Console.WriteLine($"[CapMonster] ReportFailure => {respStr}");
+			Log.Information($"[CapMonster] ReportFailure => {respStr}");
 		}
 
 		// Clases auxiliares

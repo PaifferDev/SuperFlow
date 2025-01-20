@@ -1,4 +1,5 @@
-﻿using SuperFlow.Core.Default.Tools.CaptchaTool.Models;
+﻿using Serilog;
+using SuperFlow.Core.Default.Tools.CaptchaTool.Models;
 using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Text.Json;
@@ -38,58 +39,57 @@ namespace SuperFlow.Core.Default.Tools.CaptchaTool.Providers
 			// Seleccionar una API key al azar
 			var selectedKey = _apiKeys[_random.Next(_apiKeys.Count)];
 
-			// 1) Subir captcha
+			// 1) Convertir la imagen a Base64
 			var base64Image = Convert.ToBase64String(imageData);
 
+			// 2) Construir el contenido de la solicitud
 			var uploadContent = new FormUrlEncodedContent(new[]
 			{
-				new KeyValuePair<string, string>("method", "base64"),
-				new KeyValuePair<string, string>("key", selectedKey),
-				new KeyValuePair<string, string>("body", base64Image),
-				new KeyValuePair<string, string>("json", "1"),
-			});
+		new KeyValuePair<string, string>("method", "base64"),
+		new KeyValuePair<string, string>("key", selectedKey),
+		new KeyValuePair<string, string>("body", base64Image),
+		new KeyValuePair<string, string>("json", "1"),
+	});
 
+			// 3) Enviar la solicitud al servidor de 2Captcha
 			var uploadResponse = await _httpClient.PostAsync("https://2captcha.com/in.php", uploadContent, cancelToken);
 			var uploadString = await uploadResponse.Content.ReadAsStringAsync(cancelToken);
 
-			// Forzamos case-insensitive
+			// 4) Verificar la respuesta del servidor
 			var options = new JsonSerializerOptions
 			{
 				PropertyNameCaseInsensitive = true
 			};
-
 			var uploadResult = JsonSerializer.Deserialize<TwoCaptchaInResponse>(uploadString, options);
 
 			if (uploadResult == null)
 				throw new Exception($"[2Captcha] Could not parse upload response: {uploadString}");
 
-			// status=1 => OK
 			if (uploadResult.Status != 1)
 			{
 				throw new Exception($"[2Captcha] Upload failed (status !=1). Full response: {uploadString}");
 			}
 
-			string captchaId = uploadResult.Request; // Este es el ID
+			string captchaId = uploadResult.Request; 
 			_captchaKeyMapping[captchaId] = selectedKey;
 
-			// 2) Polling
+			// 5) Iniciar el proceso de polling
 			var sw = Stopwatch.StartNew();
 			while (true)
 			{
 				cancelToken.ThrowIfCancellationRequested();
 				await Task.Delay(_pollingDelayMs, cancelToken);
 
-				var checkUrl = $"https://2captcha.com/res.php?key={selectedKey}&tool=get&id={captchaId}&json=1";
+				var checkUrl = $"https://2captcha.com/res.php?key={selectedKey}&action=get&id={captchaId}&json=1";
 				var checkResponse = await _httpClient.GetStringAsync(checkUrl, cancelToken);
 
 				var checkResult = JsonSerializer.Deserialize<TwoCaptchaResResponse>(checkResponse, options);
 				if (checkResult == null)
 					throw new Exception($"[2Captcha] Could not parse polling response: {checkResponse}");
 
-				// CAPCHA_NOT_READY => status=0
 				if (checkResult.Status == 1)
 				{
-					// => la solución
+					// Éxito, devolver la solución
 					return new CaptchaResponse
 					{
 						CaptchaId = captchaId,
@@ -108,6 +108,7 @@ namespace SuperFlow.Core.Default.Tools.CaptchaTool.Providers
 			}
 		}
 
+
 		public async Task ReportFailureAsync(string captchaId)
 		{
 			if (string.IsNullOrEmpty(captchaId))
@@ -115,13 +116,13 @@ namespace SuperFlow.Core.Default.Tools.CaptchaTool.Providers
 
 			if (!_captchaKeyMapping.TryGetValue(captchaId, out var usedKey))
 			{
-				Console.WriteLine($"[2Captcha] Could not find API key for captchaId={captchaId} to report failure.");
+				Log.Information($"[2Captcha] Could not find API key for captchaId={captchaId} to report failure.");
 				return;
 			}
 
-			var url = $"https://2captcha.com/res.php?key={usedKey}&tool=reportbad&id={captchaId}&json=1";
+			var url = $"https://2captcha.com/res.php?key={usedKey}&action=reportbad&id={captchaId}&json=1";
 			var resp = await _httpClient.GetStringAsync(url);
-			Console.WriteLine($"[2Captcha] ReportFailure => {resp}");
+			Log.Information($"[2Captcha] ReportFailure => {resp}");
 		}
 
 		private class TwoCaptchaInResponse
