@@ -1,4 +1,5 @@
-﻿using SuperFlow.Core.Default.Tools.CaptchaTool.Models;
+﻿using Serilog;
+using SuperFlow.Core.Default.Tools.CaptchaTool.Models;
 using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Text;
