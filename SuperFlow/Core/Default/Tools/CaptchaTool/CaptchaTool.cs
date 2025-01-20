@@ -7,20 +7,25 @@ using System.Diagnostics;
 namespace SuperFlow.Core.Default.Tools.CaptchaTool
 {
 	/// <summary>
-	/// Tool que encapsula toda la lógica para resolver un captcha
-	/// usando uno o varios ICaptchaProvider.
+	/// CaptchaTool que:
+	/// - Corre múltiples proveedores en paralelo.
+	/// - Retorna inmediatamente si >=2 coinciden en la misma respuesta.
+	/// - Si no hay coincidencia, usa la "mejor" respuesta (menos fallas, luego más rápido).
+	/// - Cada proveedor con >=2 fallas se excluye en la siguiente ejecución.
+	/// - Si todos quedan excluidos, se resetea.
+	/// - Se maneja MaxRetries (reintento global).
 	/// </summary>
 	public class CaptchaTool : BaseTool
 	{
 		private readonly CaptchaToolConfig _config;
 
-		// Mapa [nombreProvider => cantidad de fallos]
-		private readonly ConcurrentDictionary<string, int> _providerFailureCounts = new ConcurrentDictionary<string, int>();
+		// Contador de fallas global [providerName => failsCount].
+		// Si failsCount >= 2 => excluimos en la siguiente ronda.
+		private static readonly ConcurrentDictionary<string, int> _failCounts = new ConcurrentDictionary<string, int>();
 
 		public CaptchaTool(string name, CaptchaToolConfig config) : base(name)
 		{
 			_config = config ?? throw new ArgumentNullException(nameof(config));
-
 			if (_config.Providers.Count == 0)
 				throw new InvalidOperationException("No hay proveedores de captcha registrados en CaptchaToolConfig.");
 		}
@@ -29,49 +34,33 @@ namespace SuperFlow.Core.Default.Tools.CaptchaTool
 		{
 			var args = parameters as CaptchaToolParameters;
 			if (args == null || args.ImageData.Length == 0)
-			{
 				throw new ArgumentException("Se requiere 'ImageData' válido para resolver captcha.");
-			}
 
-			// 1. Obtener la imagen del captcha en bytes
-			byte[]? imageData = args?.ImageData;
+			byte[] imageData = args.ImageData;
 			if (imageData == null || imageData.Length == 0)
-			{
 				throw new ArgumentException("No se recibió 'ImageData' para resolver el captcha.");
-			}
 
-			// 2. Intentar resolver el captcha (puedes manejar reintentos si gustas)
-			var result = await SolveCaptchaWithRetriesAsync(imageData);
-
-			// 3. Devolver algo: un objeto con la info del captcha resuelto
-			return new
-			{
-				ProviderName = result.ProviderName,
-				CaptchaText = result.CaptchaText,
-				SolveTimeSeconds = result.SolveTimeSeconds,
-				CaptchaId = result.CaptchaId
-			};
-		}
-
-		/// <summary>
-		/// Intenta resolver el captcha con reintentos (hasta _config.MaxRetries).
-		/// Si falla con todos los providers en un intento, vuelve a pedir la imagen
-		/// o lanza excepción (a tu elección).
-		/// </summary>
-		private async Task<CaptchaResult> SolveCaptchaWithRetriesAsync(byte[] imageData)
-		{
 			int attempt = 0;
 			while (attempt < _config.MaxRetries)
 			{
 				attempt++;
 				try
 				{
-					return await SolveCaptchaOnceAsync(imageData, _config.SolveTimeoutSeconds);
+					// 1. Resolver en UNA ronda
+					var result = await SolveOneRoundAsync(imageData, _config.SolveTimeoutSeconds);
+					// 2. Devolver en objeto anónimo
+					return new
+					{
+						ProviderName = result.ProviderName,
+						CaptchaText = result.CaptchaText,
+						SolveTimeSeconds = result.SolveTimeSeconds,
+						CaptchaId = result.CaptchaId
+					};
 				}
 				catch (Exception ex)
 				{
-					// Se vale loguear, re-lanzar, etc.
-					Console.WriteLine($"[CaptchaTool] Falló intento #{attempt}: {ex.Message}");
+					// Si la ronda entera falla => reintento
+					Debug.WriteLine($"[CaptchaTool] Falló la ronda #{attempt} => {ex.Message}");
 				}
 			}
 
@@ -79,107 +68,141 @@ namespace SuperFlow.Core.Default.Tools.CaptchaTool
 		}
 
 		/// <summary>
-		/// Realiza UN intento de resolver el captcha usando TODOS los providers en paralelo (o en orden),
-		/// y retorna tan pronto uno lo resuelva satisfactoriamente.
+		/// Corre 1 ronda: 
+		/// - filtra proveedores (excluye con fails>=2), 
+		/// - si todos excluidos => reset a 0,
+		/// - lanza tareas => WhenAny => en cuanto 2 coincidan => return,
+		/// - si se acaban => fallback a la "mejor" (menos fails, luego más rápida),
+		/// - si ni una exitosa => lanza excepción.
 		/// </summary>
-		private async Task<CaptchaResult> SolveCaptchaOnceAsync(byte[] imageData, int solveTimeoutSeconds)
+		private async Task<CaptchaResult> SolveOneRoundAsync(byte[] imageData, int solveTimeoutSeconds)
 		{
-			// 1. Ordenar providers por cantidad de fallos (asc). 
-			//    (Opcional, si quieres dar prioridad a los que han fallado menos)
-			var providers = _config.Providers
-				.OrderBy(p => _providerFailureCounts.ContainsKey(p.Name) ? _providerFailureCounts[p.Name] : 0)
+			// A) Filtrar con fails < 2
+			var activeProviders = _config.Providers
+				.Where(p => _failCounts.GetValueOrDefault(p.Name, 0) < 2)
 				.ToList();
 
-			// 2. Crear tareas en paralelo
-			var tasks = new List<Task<CaptchaResult>>();
-			foreach (var provider in providers)
+			if (!activeProviders.Any())
 			{
-				tasks.Add(SolveWithProvider(provider, imageData, solveTimeoutSeconds));
+				// Reset
+				foreach (var kvp in _failCounts)
+					_failCounts[kvp.Key] = 0;
+
+				// Todos se "des-excluyen"
+				activeProviders = _config.Providers.ToList();
 			}
 
-			// 3. Esperar a que una tarea finalice (WhenAny).
+			// B) Crear una tarea por provider
+			//    Cada tarea => (exito => CaptchaResult, fails => null)
+			var tasks = new Dictionary<Task<(bool isSuccess, CaptchaResult? result, Exception? ex, TimeSpan? elapsed)>, string>();
+			foreach (var provider in activeProviders)
+			{
+				var t = SolveWithProviderAsync(provider, imageData, solveTimeoutSeconds);
+				tasks[t] = provider.Name;
+			}
+
+			// Se guardan los result en un diccionario => [ providerName => CaptchaResult con su tiempo...]
+			var successList = new List<(CaptchaResult cr, TimeSpan elapsed)>();
+			// Clave => captchaText => #de coincidencias => lista
+			var solutionGroups = new Dictionary<string, List<(CaptchaResult cr, TimeSpan elapsed)>>();
+
+			// C) Recibir las tareas de a una => WhenAny => chequear coincidencias
 			while (tasks.Count > 0)
 			{
-				Task<CaptchaResult> finishedTask = await Task.WhenAny(tasks);
+				var finishedTask = await Task.WhenAny(tasks.Keys);
+				var providerName = tasks[finishedTask];
 				tasks.Remove(finishedTask);
 
-				try
+				var (isSuccess, result, ex, elapsed) = finishedTask.Result;
+
+				if (!isSuccess)
 				{
-					// Si una tarea terminó con éxito, devolvemos su result
-					var result = await finishedTask;
-					return result;
+					// Falla => incrementa su fail
+					_failCounts.AddOrUpdate(providerName, 1, (_, oldv) => oldv + 1);
+					Debug.WriteLine($"[CaptchaTool] Provider {providerName} fail => {ex?.Message}");
 				}
-				catch (TimeoutException tex)
+				else
 				{
-					// Un provider tardó demasiado => anotar fallo
-					IncrementFailureFromMessage(tex.Message);
-				}
-				catch (Exception ex)
-				{
-					// Cualquier otro error => anotar fallo
-					IncrementFailureFromMessage(ex.Message);
+					// Éxito
+					var cr = result!;
+					var e = elapsed!.Value;
+					successList.Add((cr, e));
+					// Sumar a solutionGroups
+					if (!solutionGroups.ContainsKey(cr.CaptchaText))
+						solutionGroups[cr.CaptchaText] = new List<(CaptchaResult, TimeSpan)>();
+					solutionGroups[cr.CaptchaText].Add((cr, e));
+
+					// Verificar si ya tenemos al menos 2 con esa solution
+					if (solutionGroups[cr.CaptchaText].Count >= 2)
+					{
+						// Retornamos inmediatamente
+						Debug.WriteLine($"[CaptchaTool] Se obtuvo coincidencia de 2 providers => {cr.CaptchaText}");
+						return cr;
+						// (Podrías devolver la *más rápida* de ese group, 
+						//  pero si se van sumando en orden de finalización, da igual.)
+					}
 				}
 			}
 
-			// Si llegamos aquí, TODOS los providers fallaron en este intento
-			throw new InvalidOperationException("Todos los proveedores fallaron al resolver el captcha.");
+			// D) Si llegamos aquí => no hubo coincidencia >=2
+			// => fallback
+			if (successList.Count == 0)
+				throw new InvalidOperationException("Ningún provider devolvió resultado exitoso.");
+
+			// => Tomar la "mejor" => 
+			//  criterio = "menos fails" => si tie => "más rápido"
+			//  => necesitamos saber fails y su elapsed
+			// successList => (CaptchaResult cr, TimeSpan elapsed)
+			// recordemos cr.ProviderName
+
+			// 1) Agrupa por provider, saca su failCount
+			// 2) Ordena: failCount asc, then elapsed asc
+			var best = successList
+				.OrderBy(x => _failCounts.GetValueOrDefault(x.cr.ProviderName, 0))
+				.ThenBy(x => x.elapsed)
+				.First();
+
+			Debug.WriteLine($"[CaptchaTool] No hubo coincidencia => se escoge la 'mejor': {best.cr.CaptchaText} de {best.cr.ProviderName}");
+			return best.cr;
 		}
 
 		/// <summary>
-		/// Llama a un provider con un CancellationToken de 'solveTimeoutSeconds'.
-		/// Similar a lo que hacía SolveWithProvider(...) en tu CaptchaSolverService.
+		/// Invoca a un provider con un CancellationToken de solveTimeoutSeconds. 
+		/// Retorna (isSuccess, CaptchaResult?, Exception?, TimeSpan?).
+		/// isSuccess => true si no lanzó excepción.
 		/// </summary>
-		private async Task<CaptchaResult> SolveWithProvider(ICaptchaProvider provider, byte[] imageData, int solveTimeoutSeconds)
+		private async Task<(bool isSuccess, CaptchaResult? result, Exception? ex, TimeSpan? elapsed)> SolveWithProviderAsync(
+			ICaptchaProvider provider,
+			byte[] imageData,
+			int solveTimeoutSeconds)
 		{
 			var stopwatch = Stopwatch.StartNew();
 			using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(solveTimeoutSeconds));
 
 			try
 			{
-				var providerResponse = await provider.SolveCaptchaAsync(imageData, cts.Token);
+				var resp = await provider.SolveCaptchaAsync(imageData, cts.Token);
 				stopwatch.Stop();
-
-				// providerResponse => (CaptchaId, Solution)
-				return new CaptchaResult(
+				// ok
+				var cr = new CaptchaResult(
 					providerName: provider.Name,
-					captchaText: providerResponse.Solution,
+					captchaText: resp.Solution,
 					solveTimeSeconds: stopwatch.Elapsed.TotalSeconds,
-					captchaId: providerResponse.CaptchaId
+					captchaId: resp.CaptchaId
 				);
+				return (true, cr, null, stopwatch.Elapsed);
 			}
-			catch (OperationCanceledException)
+			catch (OperationCanceledException exCancel)
 			{
 				stopwatch.Stop();
-				throw new TimeoutException($"[CaptchaTool] Se agotaron {solveTimeoutSeconds}s con el provider {provider.Name}");
+				return (false, null, new TimeoutException($"Timeout {solveTimeoutSeconds}s en {provider.Name}", exCancel), stopwatch.Elapsed);
 			}
-			catch
+			catch (Exception ex)
 			{
 				stopwatch.Stop();
-				throw; // Se manejará en SolveCaptchaOnceAsync
+				return (false, null, ex, stopwatch.Elapsed);
 			}
 		}
-
-		/// <summary>
-		/// Analiza el mensaje de excepción en busca del provider y 
-		/// aumenta el contador de fallos para él.
-		/// </summary>
-		private void IncrementFailureFromMessage(string message)
-		{
-			var prefix = "provider ";
-			// Ejemplo: "[CaptchaTool] Se agotaron 70s con el provider TwoCaptcha"
-			// Ajusta tu parsing según tus logs
-			int index = message.IndexOf(prefix, StringComparison.OrdinalIgnoreCase);
-			if (index >= 0)
-			{
-				string providerName = message.Substring(index + prefix.Length).Trim();
-				_providerFailureCounts.AddOrUpdate(providerName, 1, (k, oldV) => oldV + 1);
-			}
-		}
-
-		// ---------------------------------------------------------------------------------------
-		// Opcional: un método para reportar captchas fallidos 
-		//           (si la librería ICaptchaProvider lo contempla).
-		// ---------------------------------------------------------------------------------------
 
 		public async Task ReportFailureAsync(string providerName, string captchaId)
 		{
@@ -187,7 +210,9 @@ namespace SuperFlow.Core.Default.Tools.CaptchaTool
 			if (provider != null)
 			{
 				await provider.ReportFailureAsync(captchaId);
-				_providerFailureCounts.AddOrUpdate(providerName, 1, (k, oldV) => oldV + 1);
+				// Ajustar contadores => si deseas que "reportFailure" incremente la estadística 
+				// de fallas, añade algo como:
+				// _failCounts.AddOrUpdate(providerName, 1, (_, oldV) => oldV + 1);
 			}
 		}
 	}
