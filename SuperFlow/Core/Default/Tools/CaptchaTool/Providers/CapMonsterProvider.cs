@@ -14,7 +14,7 @@ namespace SuperFlow.Core.Default.Tools.CaptchaTool.Providers
 		private readonly int _pollingDelayMs;
 		private readonly Random _random;
 		private readonly ConcurrentDictionary<int, string> _taskKeyMapping;
-
+		public int Trust => 5;
 		public string Name => "CapMonster";
 		public double? AverageSolveTimeSeconds => null;
 		public decimal? CostPerCaptcha => null;

@@ -1,4 +1,6 @@
-﻿using SuperFlow.Core.Default.Tools.CaptchaTool;
+﻿using Moq;
+using SuperFlow.Core.Contracts;
+using SuperFlow.Core.Default.Tools.CaptchaTool;
 using SuperFlow.Core.Default.Tools.CaptchaTool.Models;
 using SuperFlow.Core.Models;
 
@@ -6,7 +8,14 @@ namespace SuperFlow.Tests.ToolsTest
 {
 	public class CaptchaToolTests
 	{
-		[Fact]
+		private Mock<IFlowLogger> mockLogger;
+
+		public CaptchaToolTests()
+        {
+		 mockLogger = new Mock<IFlowLogger>();
+		}
+
+        [Fact]
 		public async Task TwoProvidersFastCoincidence_ShouldReturnImmediately()
 		{
 			// Arrange
@@ -19,7 +28,7 @@ namespace SuperFlow.Tests.ToolsTest
 				MaxRetries = 1,
 				Providers = new List<ICaptchaProvider> { p1, p2, p3 }
 			};
-			var tool = new CaptchaTool("TestTool", config);
+			var tool = new CaptchaTool("TestTool", config, mockLogger.Object);
 
 			// Act
 			var context = new FlowContext();
@@ -44,7 +53,7 @@ namespace SuperFlow.Tests.ToolsTest
 				MaxRetries = 1,
 				Providers = new List<ICaptchaProvider> { p1, p2, p3 }
 			};
-			var tool = new CaptchaTool("TestTool", config);
+			var tool = new CaptchaTool("TestTool", config, mockLogger.Object);
 
 			// Act
 			var context = new FlowContext();
@@ -68,7 +77,7 @@ namespace SuperFlow.Tests.ToolsTest
 				MaxRetries = 3,
 				Providers = new List<ICaptchaProvider> { p1, p2 }
 			};
-			var tool = new CaptchaTool("TestTool", config);
+			var tool = new CaptchaTool("TestTool", config, mockLogger.Object);
 
 			// Act 1: P1 falla, P2 responde correctamente.
 			var context = new FlowContext();
@@ -99,7 +108,7 @@ namespace SuperFlow.Tests.ToolsTest
 				MaxRetries = 3,
 				Providers = new List<ICaptchaProvider> { p1, p2 }
 			};
-			var tool = new CaptchaTool("TestTool", config);
+			var tool = new CaptchaTool("TestTool", config, mockLogger.Object);
 
 			// Act & Assert
 			await Assert.ThrowsAsync<InvalidOperationException>(() =>
@@ -120,7 +129,7 @@ namespace SuperFlow.Tests.ToolsTest
 				MaxRetries = 1,
 				Providers = new List<ICaptchaProvider> { p1, p2 }
 			};
-			var tool = new CaptchaTool("TestTool", config);
+			var tool = new CaptchaTool("TestTool", config, mockLogger.Object);
 
 			// Act 1: Resolver con respuesta incorrecta.
 			var context = new FlowContext();
@@ -147,7 +156,7 @@ namespace SuperFlow.Tests.ToolsTest
 			public string Name { get; }
 			public double? AverageSolveTimeSeconds => null;
 			public decimal? CostPerCaptcha => null;
-
+			public int Trust => 8;
 			private readonly string _solution;
 			private readonly int _delayMs;
 
@@ -180,7 +189,7 @@ namespace SuperFlow.Tests.ToolsTest
 			public string Name { get; }
 			public double? AverageSolveTimeSeconds => null;
 			public decimal? CostPerCaptcha => null;
-
+			public int Trust => 9;
 			public FailingProvider(string name)
 			{
 				Name = name;
@@ -205,7 +214,7 @@ namespace SuperFlow.Tests.ToolsTest
 			public string Name { get; }
 			public double? AverageSolveTimeSeconds => null;
 			public decimal? CostPerCaptcha => null;
-
+			public int Trust => 7;
 			public int NextFailsCount { get; set; } = 0;
 			public TogglingProvider(string name)
 			{

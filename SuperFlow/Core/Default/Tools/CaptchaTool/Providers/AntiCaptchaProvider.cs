@@ -17,6 +17,7 @@ namespace SuperFlow.Core.Default.Tools.CaptchaTool.Providers
 		private readonly ConcurrentDictionary<int, string> _taskKeyMapping;
 
 		public string Name => "AntiCaptcha";
+		public int Trust => 9;
 		public double? AverageSolveTimeSeconds => null;
 		public decimal? CostPerCaptcha => null;
 

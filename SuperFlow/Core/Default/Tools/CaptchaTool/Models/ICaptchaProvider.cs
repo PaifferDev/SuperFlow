@@ -3,6 +3,7 @@
 	public interface ICaptchaProvider
 	{
 		string Name { get; }
+		int Trust { get; }
 		double? AverageSolveTimeSeconds { get; }
 		decimal? CostPerCaptcha { get; }
 

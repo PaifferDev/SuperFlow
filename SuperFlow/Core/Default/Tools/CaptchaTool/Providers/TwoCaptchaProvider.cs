@@ -14,7 +14,7 @@ namespace SuperFlow.Core.Default.Tools.CaptchaTool.Providers
 		private readonly int _pollingDelayMs;
 		private readonly Random _random;
 		private readonly ConcurrentDictionary<string, string> _captchaKeyMapping;
-
+		public int Trust => 7;
 		public string Name => "2Captcha";
 		public double? AverageSolveTimeSeconds => null;
 		public decimal? CostPerCaptcha => null;
