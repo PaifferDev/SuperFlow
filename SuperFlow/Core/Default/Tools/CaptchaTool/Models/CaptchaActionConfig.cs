@@ -8,23 +8,22 @@
 	/// </summary>
 	public class CaptchaToolConfig
 	{
-		/// <summary>
-		/// Tiempo máximo (en segundos) para intentar resolver un captcha con un provider.
-		/// </summary>
 		public int SolveTimeoutSeconds { get; set; } = 70;
-
-		/// <summary>
-		/// Número máximo de reintentos (si deseas).
-		/// </summary>
-		public int MaxRetries { get; set; } = 3;
-
-		/// <summary>
-		/// Lista de providers disponibles para resolver captchas.
-		/// </summary>
+		public int MaxRetries { get; set; } = 1;
 		public List<ICaptchaProvider> Providers { get; set; } = new List<ICaptchaProvider>();
 	}
+
 	public class CaptchaToolParameters
 	{
 		public byte[] ImageData { get; set; } = Array.Empty<byte>();
 	}
+
+	public class CaptchaToolResult
+	{
+		public string ProviderName { get; set; }
+		public string CaptchaText { get; set; }
+		public double SolveTimeSeconds { get; set; }
+		public string CaptchaId { get; set; }
+	}
+
 }

@@ -4,9 +4,6 @@
 	{
 		string Name { get; }
 		int Trust { get; }
-		double? AverageSolveTimeSeconds { get; }
-		decimal? CostPerCaptcha { get; }
-
 		Task<CaptchaResponse> SolveCaptchaAsync(byte[] imageData, CancellationToken token = default);
 		Task ReportFailureAsync(string captchaId);
 	}

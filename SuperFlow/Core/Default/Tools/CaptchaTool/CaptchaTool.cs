@@ -1,4 +1,5 @@
-﻿using SuperFlow.Core.Contracts;
+﻿using Serilog;
+using SuperFlow.Core.Contracts;
 using SuperFlow.Core.Default.Tools.CaptchaTool.Models;
 using SuperFlow.Core.Models;
 using SuperFlow.Core.Tools;
@@ -10,43 +11,54 @@ namespace SuperFlow.Core.Default.Tools.CaptchaTool
 	public class CaptchaTool : BaseTool
 	{
 		private readonly CaptchaToolConfig _config;
-		private readonly IFlowLogger? _logger;
-
-		// Contador de fallas global [providerName => failsCount]
-		private static readonly ConcurrentDictionary<string, int> _failCounts = new();
-
-		// Flag estático que se vuelve true cuando al menos un captcha se reportó como mal resuelto
-		// y, desde entonces, se exigen 2 proveedores coincidentes para aceptar la solución.
+		private readonly ILogger? _logger;
+		private static readonly ConcurrentDictionary<string, int> _failCounts = new(); // [providerName => failCount]
 		private static bool _anySolutionReportedAsWrong = false;
-
-		// Umbral de Trust para aceptar de inmediato SI no se ha reportado ningún error antes
 		private const int TRUST_THRESHOLD = 8;
 
-		public CaptchaTool(string name, CaptchaToolConfig config, IFlowLogger? flowLogger)
+		public CaptchaTool(string name, CaptchaToolConfig config, IFlowLogger? flowLogger = null)
 			: base(name)
 		{
-			if (flowLogger != null)
-			{
-				_logger = flowLogger;
-			}
-
 			_config = config ?? throw new ArgumentNullException(nameof(config));
 			if (_config.Providers.Count == 0)
 				throw new InvalidOperationException("No hay proveedores de captcha registrados en CaptchaToolConfig.");
+			// Si flowLogger no tiene GetSerilogLogger, intentamos castear
+			_logger = flowLogger as ILogger;
 		}
 
 		public override async Task<object?> ExecuteAsync(FlowContext context, object? parameters = null)
 		{
-			var args = parameters as CaptchaToolParameters;
-			if (args == null || args.ImageData.Length == 0)
+			if (parameters is not CaptchaToolParameters captchaParams || captchaParams.ImageData.Length == 0)
 				throw new ArgumentException("Se requiere 'ImageData' válido para resolver captcha.");
 
-			// 1) Filtrar proveedores activos (menos de 2 fallas consecutivas)
+			for (int attempt = 0; attempt <= _config.MaxRetries; attempt++)
+			{
+				var (isSuccess, result) = await TrySolveOnce(context, captchaParams.ImageData);
+				if (isSuccess && result != null)
+				{
+					return new CaptchaToolResult
+					{
+						ProviderName = result.ProviderName,
+						CaptchaText = result.CaptchaText,
+						SolveTimeSeconds = result.SolveTimeSeconds,
+						CaptchaId = result.CaptchaId
+					};
+				}
+				else
+				{
+					_logger?.Error("[CaptchaTool] Falló la resolución del captcha en reintento #{Attempt}.", attempt + 1);
+					await Task.Delay(1500);
+				}
+			}
+			throw new InvalidOperationException("[CaptchaTool] No se pudo resolver el captcha tras los reintentos internos.");
+		}
+
+		private async Task<(bool isSuccess, CaptchaResult? result)> TrySolveOnce(FlowContext context, byte[] imageData)
+		{
 			var activeProviders = _config.Providers
 				.Where(p => _failCounts.GetValueOrDefault(p.Name, 0) < 2)
 				.ToList();
 
-			// Si todos están con >=2 fallas, reseteamos contadores y volvemos a incluirlos
 			if (!activeProviders.Any())
 			{
 				foreach (var key in _failCounts.Keys)
@@ -56,105 +68,85 @@ namespace SuperFlow.Core.Default.Tools.CaptchaTool
 				activeProviders = _config.Providers.ToList();
 			}
 
-			// 2) Resolver
-			var result = await SolveCaptchaWithPossibleConsensusAsync(
-				activeProviders,
-				args.ImageData,
-				_config.SolveTimeoutSeconds);
-
-			return new
+			try
 			{
-				ProviderName = result.ProviderName,
-				CaptchaText = result.CaptchaText,
-				SolveTimeSeconds = result.SolveTimeSeconds,
-				CaptchaId = result.CaptchaId
-			};
+				var result = await SolveCaptchaWithPossibleConsensusAsync(activeProviders, imageData, _config.SolveTimeoutSeconds);
+				return (true, result);
+			}
+			catch (Exception ex)
+			{
+				_logger?.Error(ex, "[CaptchaTool] Error en TrySolveOnce.");
+				return (false, null);
+			}
 		}
 
-		/// <summary>
-		/// Lógica que lanza todos los proveedores en paralelo.
-		/// Si NO se ha reportado ningún error globalmente, 
-		/// podemos aceptar en caliente la primera respuesta de un proveedor con Trust alto.
-		/// Si YA se ha reportado un error, forzamos a que haya 2 respuestas iguales para aceptar.
-		/// </summary>
 		private async Task<CaptchaResult> SolveCaptchaWithPossibleConsensusAsync(
 			List<ICaptchaProvider> providers,
 			byte[] imageData,
 			int solveTimeoutSeconds)
 		{
-			var tasks = providers.ToDictionary(
-				provider => SolveWithProviderAsync(provider, imageData, solveTimeoutSeconds),
-				provider => provider.Name
-			);
+			var tasks = providers
+				.Select(provider => SolveWithProviderAsync(provider, imageData, solveTimeoutSeconds))
+				.ToList();
 
-			// Para almacenar éxitos
 			var successList = new List<(CaptchaResult result, TimeSpan elapsed)>();
-			// Agrupar por texto => ver cuántos coinciden
 			var solutionGroups = new Dictionary<string, List<(CaptchaResult, TimeSpan)>>();
 
-			// Mientras queden tareas
-			while (tasks.Count > 0)
+			while (tasks.Any())
 			{
-				var finishedTask = await Task.WhenAny(tasks.Keys);
-				var providerName = tasks[finishedTask];
+				var finishedTask = await Task.WhenAny(tasks);
 				tasks.Remove(finishedTask);
 
 				var (isSuccess, result, elapsed) = await finishedTask;
 				if (isSuccess && result != null)
 				{
 					successList.Add((result, elapsed));
-
 					if (!solutionGroups.ContainsKey(result.CaptchaText))
 						solutionGroups[result.CaptchaText] = new List<(CaptchaResult, TimeSpan)>();
 					solutionGroups[result.CaptchaText].Add((result, elapsed));
 
-					// Chequear consenso => 2 con la misma respuesta
 					if (solutionGroups[result.CaptchaText].Count >= 2)
 					{
-						_logger?.LogError($"[CaptchaTool] Se alcanzó consenso con texto '{result.CaptchaText}'. Retornando.");
+						_logger?.Information("[CaptchaTool] Se alcanzó consenso con la solución '{Text}'.", result.CaptchaText);
 						return result;
 					}
-
-					// Si aún NO se ha reportado ningún error global (anySolutionReportedAsWrong==false),
-					// podemos aceptar la primera respuesta de alto Trust
 					if (!_anySolutionReportedAsWrong)
 					{
 						var trustValue = providers.First(p => p.Name == result.ProviderName).Trust;
 						if (trustValue >= TRUST_THRESHOLD)
 						{
-							_logger?.LogError($"[CaptchaTool] Respuesta aceptada inmediatamente de {result.ProviderName} (Trust={trustValue}).");
+							_logger?.Information("[CaptchaTool] Respuesta aceptada inmediatamente de {Provider} (Trust={Trust}).", result.ProviderName, trustValue);
 							return result;
 						}
 					}
-					// Nota: si _anySolutionReportedAsWrong == true, no aceptamos en caliente.
 				}
 				else
 				{
-					// Fallo => incrementar fallCount
-					_failCounts.AddOrUpdate(providerName, 1, (_, old) => old + 1);
+					if (result != null)
+					{
+						_failCounts.AddOrUpdate(result.ProviderName, 1, (_, old) => old + 1);
+					}
 				}
 			}
 
-			// Si no hay éxitos, error
-			if (successList.Count == 0)
-				throw new InvalidOperationException("No se pudo resolver el captcha (ningún proveedor tuvo éxito).");
+			if (!successList.Any())
+				throw new InvalidOperationException("[CaptchaTool] Ningún proveedor resolvió el captcha.");
 
-			// No se logró consenso ni se aceptó en caliente => tomamos la 'mejor' (fallback)
 			var best = successList
 				.OrderBy(x => _failCounts.GetValueOrDefault(x.result.ProviderName, 0))
 				.ThenByDescending(x => providers.First(p => p.Name == x.result.ProviderName).Trust)
 				.ThenBy(x => x.elapsed)
 				.First();
 
-			_logger?.LogError($"[CaptchaTool] Fallback => {best.result.ProviderName} (Trust={providers.First(p => p.Name == best.result.ProviderName).Trust}), Tiempo={best.elapsed.TotalSeconds}");
+			_logger?.Information("[CaptchaTool] Fallback => {Provider} (Trust={Trust}), Tiempo={Time}s.", best.result.ProviderName,
+				providers.First(p => p.Name == best.result.ProviderName).Trust, best.elapsed.TotalSeconds);
 			return best.result;
 		}
 
-		/// <summary>
-		/// Llama al proveedor individual con timeout y maneja errores.
-		/// </summary>
-		private async Task<(bool isSuccess, CaptchaResult? result, TimeSpan elapsed)>
-			SolveWithProviderAsync(ICaptchaProvider provider, byte[] imageData, int solveTimeoutSeconds)
+		private async Task<(bool isSuccess, CaptchaResult? result, TimeSpan elapsed)> SolveWithProviderAsync(
+			ICaptchaProvider provider,
+			byte[] imageData,
+			int solveTimeoutSeconds)
 		{
 			var sw = Stopwatch.StartNew();
 			using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(solveTimeoutSeconds));
@@ -162,32 +154,26 @@ namespace SuperFlow.Core.Default.Tools.CaptchaTool
 			{
 				var resp = await provider.SolveCaptchaAsync(imageData, cts.Token);
 				sw.Stop();
-				var cr = new CaptchaResult(
+				var captchaResult = new CaptchaResult(
 					providerName: provider.Name,
 					captchaText: resp.Solution,
 					solveTimeSeconds: sw.Elapsed.TotalSeconds,
 					captchaId: resp.CaptchaId
 				);
-				return (true, cr, sw.Elapsed);
+				return (true, captchaResult, sw.Elapsed);
 			}
 			catch (Exception ex)
 			{
 				sw.Stop();
-				_logger?.LogError($"[CaptchaTool] Error en SolveWithProviderAsync '{provider.Name}'", ex);
+				_logger?.Error(ex, "[CaptchaTool] Error en SolveWithProviderAsync con {Provider}.", provider.Name);
+				_failCounts.AddOrUpdate(provider.Name, 1, (_, old) => old + 1);
 				return (false, null, sw.Elapsed);
 			}
 		}
 
-		/// <summary>
-		/// Se llama cuando externamente detectaron que la solución fue errónea.
-		/// Marcamos la variable estática para forzar esperar 2 resultados en siguientes llamadas.
-		/// </summary>
 		public async Task ReportFailureAsync(string providerName, string captchaId)
 		{
-			// Marcar el "error global"
 			_anySolutionReportedAsWrong = true;
-
-			// Además, incrementamos el failCount del proveedor
 			var provider = _config.Providers.FirstOrDefault(p => p.Name == providerName);
 			if (provider != null)
 			{
