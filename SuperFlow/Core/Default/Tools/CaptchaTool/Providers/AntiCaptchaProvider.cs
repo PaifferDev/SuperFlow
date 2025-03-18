@@ -32,14 +32,23 @@ namespace SuperFlow.Core.Default.Tools.CaptchaTool.Providers
 			_taskKeyMapping = new ConcurrentDictionary<int, string>();
 		}
 
-		public async Task<CaptchaResponse> SolveCaptchaAsync(byte[] imageData, CancellationToken cancelToken = default)
+		public async Task<CaptchaResponse> SolveCaptchaAsync(byte[] imageData, CancellationToken cancelToken = default, bool sensitivity = false)
 		{
 			if (imageData == null || imageData.Length == 0)
 				throw new ArgumentException("Empty captcha image data.");
 
 			var selectedKey = _clientKeys[_random.Next(_clientKeys.Count)];
 			var base64Img = Convert.ToBase64String(imageData);
-			var createPayload = new { clientKey = selectedKey, task = new { type = "ImageToTextTask", body = base64Img } };
+			var createPayload = new
+			{
+				clientKey = selectedKey,
+				task = new
+				{
+					type = "ImageToTextTask",
+					body = base64Img,
+					@case = sensitivity
+				}
+			};
 			var createJson = JsonSerializer.Serialize(createPayload);
 			using var createContent = new StringContent(createJson, Encoding.UTF8, "application/json");
 

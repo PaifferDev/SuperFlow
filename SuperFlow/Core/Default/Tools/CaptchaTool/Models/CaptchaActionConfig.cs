@@ -16,6 +16,7 @@
 	public class CaptchaToolParameters
 	{
 		public byte[] ImageData { get; set; } = Array.Empty<byte>();
+		public bool Sensitivity { get; set; } = false;
 	}
 
 	public class CaptchaToolResult

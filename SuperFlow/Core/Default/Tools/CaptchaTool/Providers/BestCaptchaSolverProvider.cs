@@ -2,6 +2,7 @@
 using SuperFlow.Core.Default.Tools.CaptchaTool.Models;
 using System.Collections.Concurrent;
 using System.Diagnostics;
+using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
@@ -13,7 +14,6 @@ namespace SuperFlow.Core.Default.Tools.CaptchaTool.Providers
 		private readonly List<string> _apiTokens;
 		private readonly int _pollingDelayMs;
 		private readonly Random _random;
-		
 		private readonly ConcurrentDictionary<int, string> _taskKeyMapping;
 
 		public string Name => "BestCaptchaSolver";
@@ -32,7 +32,7 @@ namespace SuperFlow.Core.Default.Tools.CaptchaTool.Providers
 			_taskKeyMapping = new ConcurrentDictionary<int, string>();
 		}
 
-		public async Task<CaptchaResponse> SolveCaptchaAsync(byte[] imageData, CancellationToken cancelToken = default)
+		public async Task<CaptchaResponse> SolveCaptchaAsync(byte[] imageData, CancellationToken cancelToken = default, bool sensitivity = false)
 		{
 			if (imageData == null || imageData.Length == 0)
 				throw new ArgumentException("Empty captcha image data.");
@@ -44,6 +44,10 @@ namespace SuperFlow.Core.Default.Tools.CaptchaTool.Providers
 				{ "access_token", selectedKey },
 				{ "b64image", base64Image }
 			};
+			if (sensitivity)
+			{
+				contentValues["is_case"] = "1";
+			}
 			var formContent = new FormUrlEncodedContent(contentValues);
 
 			HttpResponseMessage uploadResp;

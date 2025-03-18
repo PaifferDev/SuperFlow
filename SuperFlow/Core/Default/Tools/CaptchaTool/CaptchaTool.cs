@@ -33,7 +33,7 @@ namespace SuperFlow.Core.Default.Tools.CaptchaTool
 
 			for (int attempt = 0; attempt <= _config.MaxRetries; attempt++)
 			{
-				var (isSuccess, result) = await TrySolveOnce(context, captchaParams.ImageData);
+				var (isSuccess, result) = await TrySolveOnce(context, captchaParams.ImageData, captchaParams.Sensitivity);
 				if (isSuccess && result != null)
 				{
 					return new CaptchaToolResult
@@ -53,7 +53,7 @@ namespace SuperFlow.Core.Default.Tools.CaptchaTool
 			throw new InvalidOperationException("[CaptchaTool] No se pudo resolver el captcha tras los reintentos internos.");
 		}
 
-		private async Task<(bool isSuccess, CaptchaResult? result)> TrySolveOnce(FlowContext context, byte[] imageData)
+		private async Task<(bool isSuccess, CaptchaResult? result)> TrySolveOnce(FlowContext context, byte[] imageData, bool sensitivity)
 		{
 			var activeProviders = _config.Providers
 				.Where(p => _failCounts.GetValueOrDefault(p.Name, 0) < 2)
@@ -70,7 +70,7 @@ namespace SuperFlow.Core.Default.Tools.CaptchaTool
 
 			try
 			{
-				var result = await SolveCaptchaWithPossibleConsensusAsync(activeProviders, imageData, _config.SolveTimeoutSeconds);
+				var result = await SolveCaptchaWithPossibleConsensusAsync(activeProviders, imageData, _config.SolveTimeoutSeconds, sensitivity);
 				return (true, result);
 			}
 			catch (Exception ex)
@@ -83,10 +83,11 @@ namespace SuperFlow.Core.Default.Tools.CaptchaTool
 		private async Task<CaptchaResult> SolveCaptchaWithPossibleConsensusAsync(
 			List<ICaptchaProvider> providers,
 			byte[] imageData,
-			int solveTimeoutSeconds)
+			int solveTimeoutSeconds,
+			bool sensitivity)
 		{
 			var tasks = providers
-				.Select(provider => SolveWithProviderAsync(provider, imageData, solveTimeoutSeconds))
+				.Select(provider => SolveWithProviderAsync(provider, imageData, solveTimeoutSeconds, sensitivity))
 				.ToList();
 
 			var successList = new List<(CaptchaResult result, TimeSpan elapsed)>();
@@ -146,13 +147,14 @@ namespace SuperFlow.Core.Default.Tools.CaptchaTool
 		private async Task<(bool isSuccess, CaptchaResult? result, TimeSpan elapsed)> SolveWithProviderAsync(
 			ICaptchaProvider provider,
 			byte[] imageData,
-			int solveTimeoutSeconds)
+			int solveTimeoutSeconds,
+			bool sensitivity)
 		{
 			var sw = Stopwatch.StartNew();
 			using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(solveTimeoutSeconds));
 			try
 			{
-				var resp = await provider.SolveCaptchaAsync(imageData, cts.Token);
+				var resp = await provider.SolveCaptchaAsync(imageData, cts.Token, sensitivity);
 				sw.Stop();
 				var captchaResult = new CaptchaResult(
 					providerName: provider.Name,

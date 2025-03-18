@@ -31,20 +31,25 @@ namespace SuperFlow.Core.Default.Tools.CaptchaTool.Providers
 			_captchaKeyMapping = new ConcurrentDictionary<string, string>();
 		}
 
-		public async Task<CaptchaResponse> SolveCaptchaAsync(byte[] imageData, CancellationToken cancelToken = default)
+		public async Task<CaptchaResponse> SolveCaptchaAsync(byte[] imageData, CancellationToken cancelToken = default, bool sensitivity = false)
 		{
 			if (imageData == null || imageData.Length == 0)
 				throw new ArgumentException("Empty captcha image data.");
 
 			var selectedKey = _apiKeys[_random.Next(_apiKeys.Count)];
 			var base64Image = Convert.ToBase64String(imageData);
-			var formContent = new FormUrlEncodedContent(new[]
+			var keyValues = new List<KeyValuePair<string, string>>
 			{
 				new KeyValuePair<string, string>("method", "base64"),
 				new KeyValuePair<string, string>("key", selectedKey),
 				new KeyValuePair<string, string>("body", base64Image),
 				new KeyValuePair<string, string>("json", "1")
-			});
+			};
+			if (sensitivity)
+			{
+				keyValues.Add(new KeyValuePair<string, string>("case", "true"));
+			}
+			var formContent = new FormUrlEncodedContent(keyValues);
 
 			HttpResponseMessage uploadResponse;
 			try
@@ -110,7 +115,7 @@ namespace SuperFlow.Core.Default.Tools.CaptchaTool.Providers
 				return;
 			}
 			var url = $"https://2captcha.com/res.php?key={usedKey}&action=reportbad&id={captchaId}&json=1";
-			string respStr = await _httpClient.GetStringAsync(url);
+			string respStr = await _httpClient.GetStringAsync(url, CancellationToken.None);
 			Log.Information("[2Captcha] ReportFailure: {Response}", respStr);
 		}
 

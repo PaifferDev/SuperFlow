@@ -4,7 +4,7 @@
 	{
 		string Name { get; }
 		int Trust { get; }
-		Task<CaptchaResponse> SolveCaptchaAsync(byte[] imageData, CancellationToken token = default);
+		Task<CaptchaResponse> SolveCaptchaAsync(byte[] imageData, CancellationToken token = default, bool sensitivity = false);
 		Task ReportFailureAsync(string captchaId);
 	}
 }
