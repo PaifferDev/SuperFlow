@@ -167,7 +167,7 @@ namespace SuperFlow.Tests.ToolsTest
 				_delayMs = delayMs;
 			}
 
-			public async Task<CaptchaResponse> SolveCaptchaAsync(byte[] imageData, CancellationToken token = default)
+			public async Task<CaptchaResponse> SolveCaptchaAsync(byte[] imageData, CancellationToken token = default ,bool sensitivity = false)
 			{
 				await Task.Delay(_delayMs, token);
 				return new CaptchaResponse
@@ -194,7 +194,7 @@ namespace SuperFlow.Tests.ToolsTest
 			{
 				Name = name;
 			}
-			public Task<CaptchaResponse> SolveCaptchaAsync(byte[] imageData, CancellationToken token = default)
+			public Task<CaptchaResponse> SolveCaptchaAsync(byte[] imageData, CancellationToken token = default, bool sensitivity = false)
 			{
 				throw new Exception($"{Name} fails always");
 			}
@@ -221,7 +221,7 @@ namespace SuperFlow.Tests.ToolsTest
 				Name = name;
 			}
 
-			public async Task<CaptchaResponse> SolveCaptchaAsync(byte[] imageData, CancellationToken token)
+			public async Task<CaptchaResponse> SolveCaptchaAsync(byte[] imageData, CancellationToken token, bool sensitivity = false)
 			{
 				await Task.Delay(100, token);
 				if (NextFailsCount > 0)
